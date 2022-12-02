@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+    "protocol",
+    "client",
+    "server",
+    "driver",
+    "utils",
+    "options",
+]

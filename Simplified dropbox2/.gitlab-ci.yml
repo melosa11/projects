@@ -1,0 +1,31 @@
+image: cxx:latest
+
+stages:
+  - build
+  - test
+
+build:
+  stage: build
+  tags:
+    - shared-fi
+  script:
+    - make test_build
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - src/*/*.o
+      - build/dropbox
+
+test:
+  stage: test
+  tags:
+    - shared-fi
+  script:
+    - make tests
+  dependencies:
+    - build
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths:
+     - tests/system/data/test_*/valgrind.*.log

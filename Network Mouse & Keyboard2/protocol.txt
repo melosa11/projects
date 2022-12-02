@@ -1,0 +1,85 @@
+--- Intro ---
+The following protocol specifies the expected communication between one server (S)
+and its driver (SD), between S and multiple clients (C), and between client and
+client driver (CD). Throughout the whole communication the server will react to
+incoming connections and accept them if possible. It will also be able to react to
+disconnection of a client. Both server and client needs to have driver installed
+to be able to connect and communicate with each other. The installed driver will be
+same on each computer and we will have to choose one acting as server beforehand.
+This computer selected as a server will need to have mouse and keyboard available and
+connected. We will use TCP protocol for communication.
+
+--- Protocol ---
+
+At beginning:
+S:   	     		Sets up the driver
+S:   	     		Listens on specified port
+C{₁₂₃...n}:   Connect to server (if its successful we know that 
+							by having connection through TCP)
+S:  	      	Sets up screen layout (maybe through Tauris GUI)
+S: 	     			Sends MSG_START to all clients
+C{₁₂₃...n}:   Responds with MSG_ACK
+
+
+When a new client wants to connect:
+	C:	Connects to specified port via TCP
+	S:	Chooses from which side of screen the client will be connected
+
+Each 10 ms:
+	SD:	Tells server current absolute location of pointer
+	S:	Sends MSG_LOCATION with current position of pointer
+	    to client on which the pointer is located
+
+When file is moved:
+	S:	Sends MSG_FILE with file metadata to C to which
+	    we want to move/copy the file.
+			Foreach block of data from the file (with predetermined size):
+				S: Sends MSG_DATA with block of data of predetermined size to C.
+			EndForeach
+
+When key is pressed on keyboard:
+	S:	Sends MSG_KEY to C with info about which key was pressed.
+
+When pointer moves from one screen to another:
+	S:	Checks to which screen we moved and starts 
+			sending location to current one.
+
+When mouse is clicked:
+	S:	Sends MSG_CLICK to client driver with information about 
+			whether left, middle or right button was clicked.
+	C:	Receives click message and performs the "click" on the place where 
+			pointer was pointing at the time of receiving the message.
+
+When we scroll with mouse, each 10ms:
+	S:	Sends MSG_SCROLL with info about whether we scrolling up 
+			and down and the distance of scrolling.
+
+When client wants to disconnect:
+	C:	Sends MSG_DISCONNECT to S.
+	S:	Removes client from list of currently connected one and adjust 
+			its "map" which determines which screen is next to which.
+
+When server driver doesn't receive healthcheck from client:
+	S:  Waits for minute, adjusting its screen mapping in the meantime.
+			If it receives MSG_RECONNECT in the meantime, puts the screen 
+			into its previous position, else removes from the list.
+	C:  Sends MSG_RECONNECT when possible after disconnecting,
+			or MSG_DISCONNECT if it doesn't want to connect back.
+
+When client wants to send file to other client:
+	C₁: Selects to whom we want to send the file and asks server 
+			for IP address of the recipient (C₂).
+	S:  Sends IP address of C₂ to C₁ and MSG_FILE with 
+			IP address of C₁ to C₂.
+	C₂: Starts listening on the port it send to S 
+			and waits for C₁ to connect.
+	C₁:	Connects to C₂'s port and sends MSG_FILE with file metadata.
+			Foreach block of data from the file (with predetermined size):
+				C₁: Sends MSG_DATA with block of data of predetermined size to C₂.
+			EndForeach
+	C₂: After receiving MSG_FILE with metadata, creates new file
+			to which it writes data received in MSG_DATA. In case of
+			an error (wrong metadata, corrupted block etc.), informs
+			the C₁ with MSG_ERROR and number of faulty block 
+			(or just informs that it was metadata).
+

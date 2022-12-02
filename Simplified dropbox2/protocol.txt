@@ -1,0 +1,92 @@
+--- Intro ---
+The following protocol specifies the expected communication between one
+client (C) and the server (S). Throughout the whole communication the
+server will react to incoming connections and reject them if needed.
+
+If the protocol mentions MSG_* it means that the corresponding side sends the
+packet with that code and with a payload if specified.
+
+The client server communication is handled by packet.h module.
+For more information look at src/packet.h.
+
+Note: MSG_ABORT indicates erroneous state at which the both parties will
+      halt the protocol.
+--- Protocol ---
+
+S: Listens on specified port
+C: Connects to specified port
+S: [ have active connection with other client ] MSG_REJECTED
+   [ else ]                                     MSG_SETTINGS with filesystem block size
+Foreach regular file in SOURCE folder
+        :CreateFile:
+        C: MSG_CREATE_FILE with the file name
+        S: [ in process of changing/creating other file ]  MSG_ABORT
+           [ file cannot be created ]                      MSG_ABORT
+           [ file already exists ]                         MSG_NOK
+           [ file created successfully ]                   MSG_OK
+        C: MSG_SET_TIMESTAMPS with accessed & modified time
+        S: [ not in process of changing/creating any file ]  MSG_ABORT
+           [ data received ]                                 MSG_OK
+        C: MSG_SET_PERM_MODES with permission modes
+        S: [ not in process of changing/creating any file ]  MSG_ABORT
+           [ data received ]                                 MSG_OK
+        C: MSG_SET_OWNER with uid and gid of the file
+        S: [ not in process of changing/creating any file ]  MSG_ABORT
+           [ data received ]                                 MSG_OK
+        C: Split file into blocks which size is the server's filesystem block size
+           Foreach such block
+                C: [ sparse flag on && block is all zeroes]  MSG_WRITE_BLOCK with size 0
+                   [ else ]                                  MSG_WRITE_BLOCK with its size
+                S: [ not in process of changing/creating any file ]  MSG_ABORT
+                   [ couldn't write block ]                          MSG_ABORT
+                   [ else ]                                          MSG_OK
+           EndForEach
+        C: MSG_DONE
+        S: [ couldn't set access and modification time ] MSG_NOK
+           [ else ]                                      MSG_OK
+        S: [ couldn't set file permissions ]  MSG_NOK
+           [ else ]                           MSG_OK
+        S: [ couldn't set uid and gid ]  MSG_NOK
+           [ else ]                      MSG_OK
+        :EndCreateFile:
+EndForeach
+
+--- Monitoring the SOURCE folder ---
+If oneshot flag was set then skip to "--- End monitoring ---".
+
+Client will react to the following inotify(7) events on the regular files in
+the SOURCE folder and on the folder itself.
+Monitoring ends when the SIGINT or SIGTERM signals are caught.
+
+Event IN_ATTRIB on file
+        C: MSG_CHANGE_FILE with name of the file on server's side to change
+        C: MSG_SET_TIMESTAMPS with accessed & modified time
+        S: [ not in process of changing/creating any file ]  MSG_ABORT
+           [ data received ]                                 MSG_OK
+        C: MSG_DONE
+
+        C: MSG_CHANGE_FILE with name of the file on server's side to change
+        C: MSG_SET_PERM_MODES with permission modes
+        S: [ not in process of changing/creating any file ]  MSG_ABORT
+           [ data received ]                                 MSG_OK
+        C: MSG_DONE
+
+        C: MSG_CHANGE_FILE with name of the file on server's side to change
+        C: MSG_SET_OWNER with uid and gid of the file
+        S: [ not in process of changing/creating any file ]  MSG_ABORT
+           [ data received ]                                 MSG_OK
+        C: MSG_DONE
+
+Event IN_CLOSE_WRITE on file
+        C: MSG_DELETE_FILE with name of the file to delete
+        ( Everything from :CreateFile: label to :EndCreateFile: label )
+
+Events IN_MOVED_TO and IN_CREATE on folder
+        ( Everything from :CreateFile: label to :EndCreateFile: label )
+
+Events IN_MOVED_FROM and IN_DELETE on folder
+        C: MSG_DELETE_FILE with name of the file to delete
+--- End monitoring ---
+
+C: MSG_END_CONNECTION and closes the connection
+S: Close the connection

@@ -1,0 +1,11 @@
+# Ignore IDEs folders
+.idea
+.vscode
+.vimrc
+.ycm_extra_conf.py
+
+# Ignore libraries
+*.a
+*.o
+*.so
+*.so.*
